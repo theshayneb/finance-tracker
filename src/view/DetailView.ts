@@ -461,9 +461,11 @@ export class DetailView extends ItemView {
     fromInput.max = defaults.to
     fromInput.value = this.filterDateFrom ?? defaults.from
     fromInput.dataset['testid'] = 'date-input-from'
+    // Only refilter the list: re-rendering would replace this input, closing its
+    // calendar and dropping focus after a single arrow key.
     fromInput.addEventListener('change', () => {
       this.filterDateFrom = fromInput.value || null
-      void this.render()
+      this.applyFilters()
     })
 
     row.createEl('span', { text: '─', cls: 'pw-date-sep' })
@@ -474,9 +476,11 @@ export class DetailView extends ItemView {
     toInput.max = defaults.to
     toInput.value = this.filterDateTo ?? defaults.to
     toInput.dataset['testid'] = 'date-input-to'
+    // Only refilter the list: re-rendering would replace this input, closing its
+    // calendar and dropping focus after a single arrow key.
     toInput.addEventListener('change', () => {
       this.filterDateTo = toInput.value || null
-      void this.render()
+      this.applyFilters()
     })
 
     const clearBtn = row.createEl('button', {

@@ -2,6 +2,11 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.50] - 2026-11-16
+
+### Fixed
+- Transactions: the date range fields work again. Picking a day in the calendar and changing the date with the arrow keys no longer closes the calendar or drops focus after the first change.
+
 ## [0.0.49] - 2026-11-16
 
 ### Added
