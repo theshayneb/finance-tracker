@@ -84,7 +84,6 @@ export interface PennyWalletConfig {
   followUpTag: string          // tag listed in the Overview's Follow-ups card ('' = hide it)
   subscriptions: Subscription[]
   billReminderDays: number     // how many days ahead upcoming bills are shown
-  billReminderNotice: boolean  // also pop up a notice (once a day) about upcoming bills
 }
 
 export interface TransactionModalParams {
@@ -158,7 +157,6 @@ export const DEFAULT_CONFIG: PennyWalletConfig = {
   followUpTag: 'follow_up',
   subscriptions: [],
   billReminderDays: 3,
-  billReminderNotice: true,
 }
 
 export interface FrontmatterIssue {

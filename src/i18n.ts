@@ -280,8 +280,6 @@ const translations = {
     'settings.subscriptionManual': '手動記帳',
     'settings.billReminderDays': '提前提醒天數',
     'settings.billReminderDaysDesc': '帳單在扣款日前幾天開始顯示在總覽。',
-    'settings.billReminderNotice': '提醒通知',
-    'settings.billReminderNoticeDesc': '每天第一次開啟 Obsidian 時，跳出即將到期的帳單通知。',
     'sub.perMonthly': '每月 {amount}',
     'sub.perQuarterly': '每季 {amount}',
     'sub.perYearly': '每年 {amount}',
@@ -302,7 +300,6 @@ const translations = {
     'confirm.deleteSubscription': '刪除這個訂閱？已記錄的支出會保留。',
     'notice.subscriptionSaved': '已儲存訂閱「{name}」',
     'notice.subscriptionsRecorded': '已自動記錄定期帳單：',
-    'notice.billsComingUp': '即將到期的帳單：',
     'dash.upcomingBills': '即將到期的帳單',
     'dash.billToday': '今天',
     'dash.billTomorrow': '明天',
@@ -313,6 +310,11 @@ const translations = {
     'dash.billRecord': '記帳',
     'dash.billSkip': '略過',
     'dash.billManage': '管理',
+    'dash.billNoneToday': '今天沒有到期的帳單。',
+    'dash.billNoneTomorrow': '今明兩天沒有到期的帳單。',
+    'dash.billNoneDays': '未來 {days} 天沒有到期的帳單。',
+    'dash.billNext': '下一筆：{name}，{date} · {amount}',
+    'dash.billNextAfter': '再下一筆：{name}，{date}',
   },
   'en': {
     'label.type.expense': 'Expense',
@@ -574,8 +576,6 @@ const translations = {
     'settings.subscriptionManual': 'Recorded by hand',
     'settings.billReminderDays': 'Days of notice',
     'settings.billReminderDaysDesc': 'How many days before a charge it starts showing on the overview.',
-    'settings.billReminderNotice': 'Reminder pop-up',
-    'settings.billReminderNoticeDesc': 'The first time Obsidian opens each day, show a notice listing bills due soon.',
     'sub.perMonthly': '{amount} a month',
     'sub.perQuarterly': '{amount} every 3 months',
     'sub.perYearly': '{amount} a year',
@@ -596,7 +596,6 @@ const translations = {
     'confirm.deleteSubscription': 'Delete this subscription? Expenses already recorded are kept.',
     'notice.subscriptionSaved': 'Subscription "{name}" saved',
     'notice.subscriptionsRecorded': 'Recorded recurring bills:',
-    'notice.billsComingUp': 'Bills coming up:',
     'dash.upcomingBills': 'Upcoming bills',
     'dash.billToday': 'Today',
     'dash.billTomorrow': 'Tomorrow',
@@ -607,6 +606,11 @@ const translations = {
     'dash.billRecord': 'Record',
     'dash.billSkip': 'Skip',
     'dash.billManage': 'Manage',
+    'dash.billNoneToday': 'Nothing due today.',
+    'dash.billNoneTomorrow': 'Nothing due today or tomorrow.',
+    'dash.billNoneDays': 'Nothing due in the next {days} days.',
+    'dash.billNext': 'Next: {name} on {date} · {amount}',
+    'dash.billNextAfter': 'Next after that: {name} on {date}',
   },
 } as const
 
@@ -694,6 +698,13 @@ export function formatMonthLabel(yearMonth: string): string {
     monthPadded: parsed.monthPadded,
     monthName: getShortMonthName(parsed.date),
   })
+}
+
+/** "Dec 17" (en) / "12月17日" (zh-TW) from "yyyy-mm-dd". */
+export function formatMonthDay(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  if (!y || !m || !d) return date
+  return new Intl.DateTimeFormat(LOCALE_TAGS[currentLocale], { month: 'short', day: 'numeric' }).format(new Date(y, m - 1, d))
 }
 
 /** Translate a category value from markdown (key or raw string) to display label */

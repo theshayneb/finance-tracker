@@ -9,7 +9,7 @@ import { Transaction, TransactionType } from '../types'
 import { DETAIL_VIEW_TYPE } from './DetailView'
 import { renderSharedHeader, switchView } from './SharedHeader'
 import { openTransactionEditor, renderNoteWithLinks, renderTransactionRow } from './txShared'
-import { getUpcomingBills, renderUpcomingBills } from './UpcomingBills'
+import { renderUpcomingBills } from './UpcomingBills'
 import { Chart } from 'chart.js'
 import { MonthData, OTHER_COLOR, assignCategoryColors, drawExpenseChart, drawPie, getMonthRangeEndingAt, getThemeColors, rankCategories } from './charts'
 
@@ -102,12 +102,6 @@ export class DashboardView extends ItemView {
     const grid2 = contentEl.createDiv('pw-grid-2')
     const gridLeft = grid2.createDiv('pw-grid-left')
 
-    // Bills due in the next few days (relative to today, so only on this month's page)
-    if (this.currentYearMonth === currentYearMonth()) {
-      const bills = getUpcomingBills(this.walletFile)
-      if (bills.length > 0) renderUpcomingBills(gridLeft, this.app, this.walletFile, bills, () => this.openSettings())
-    }
-
     // Budgets with the follow-up list beside them (they wrap when the column is narrow)
     const hasBudgets = (this.walletFile.getConfig().budgets ?? []).length > 0
     if (hasBudgets || followUps) {
@@ -116,12 +110,18 @@ export class DashboardView extends ItemView {
       if (followUps) this.renderFollowUps(topRow, followUpTag, followUps, dp)
     }
 
-    const incExpCard = renderCard(gridLeft, {
+    // Bar chart with upcoming bills beside it (they wrap below when the column is narrow).
+    // Bills are relative to today, so they only show on the current month's page.
+    const bottomRow = gridLeft.createDiv('pw-left-bottom')
+    const incExpCard = renderCard(bottomRow, {
       title: t('trend.monthlyExpense'),
       className: 'pw-inc-exp-card',
     })
     const incExpChartWrap = incExpCard.createDiv('pw-chart-wrap')
     this.charts.push(drawExpenseChart(incExpChartWrap, data, dp, stackCategories))
+    if (this.currentYearMonth === currentYearMonth() && (this.walletFile.getConfig().subscriptions ?? []).length > 0) {
+      renderUpcomingBills(bottomRow, this.app, this.walletFile, () => this.openSettings())
+    }
 
     // ── Category pies ────────────────────────────────────────────────────────
     const gridRight = grid2.createDiv('pw-grid-right')

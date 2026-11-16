@@ -2,6 +2,16 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.51] - 2026-11-16
+
+### Changed
+- Overview: **Upcoming bills** now sits beside **Monthly expenses**, which is narrower. When the window is too narrow for both, the bills card moves below the chart.
+- The bills card shows whenever you have subscriptions and are viewing the current month. With nothing due it says so and names the next charge; otherwise it lists what's due and the charge after that.
+- The card updates when the date changes, even if Obsidian stays open.
+
+### Removed
+- The daily "Bills coming up" pop-up and its setting. The notice that a bill was just recorded automatically stays.
+
 ## [0.0.50] - 2026-11-16
 
 ### Fixed

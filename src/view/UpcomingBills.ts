@@ -1,8 +1,8 @@
 import { App, Events, Platform } from 'obsidian'
 import type { WalletFile } from '../io/WalletFile'
-import { t, tn } from '../i18n'
+import { formatMonthDay, t, tn } from '../i18n'
 import { formatAmount } from '../utils'
-import { toDateString, upcomingCharges, type UpcomingCharge } from '../subscriptions'
+import { nextChargeAfter, toDateString, upcomingCharges } from '../subscriptions'
 import { markChargeHandled } from '../subscriptionRecorder'
 import { TransactionModal } from '../modal/TransactionModal'
 import { MobileTransactionModal } from '../modal/MobileTransactionModal'
@@ -17,26 +17,33 @@ export function formatDueIn(days: number): string {
   return tn('dash.billOverdue', { days: String(-days) })
 }
 
-/** Bills within the reminder window, as of today. */
-export function getUpcomingBills(walletFile: WalletFile): UpcomingCharge[] {
-  const config = walletFile.getConfig()
-  return upcomingCharges(config.subscriptions ?? [], toDateString(new Date()), config.billReminderDays ?? 3)
+/** "Nothing due …" for a reminder window of `days`. */
+function noneDueText(days: number): string {
+  if (days <= 0) return t('dash.billNoneToday')
+  if (days === 1) return t('dash.billNoneTomorrow')
+  return tn('dash.billNoneDays', { days: String(days) })
 }
 
 const refresh = (app: App) => (app.workspace as Events).trigger('penny-wallet-mod:refresh')
 
 /**
- * Overview card listing bills due soon. Automatic ones are only listed; bills
- * recorded by hand get Record (opens the transaction form, pre-filled) and Skip.
+ * Overview card listing bills due within the reminder window, as of today, then
+ * the next charge after them. Automatic ones are only listed; bills recorded by
+ * hand get Record (opens the transaction form, pre-filled) and Skip.
  */
 export function renderUpcomingBills(
   parent: HTMLElement,
   app: App,
   walletFile: WalletFile,
-  bills: UpcomingCharge[],
   onManage: () => void,
 ): void {
-  const dp = walletFile.getConfig().decimalPlaces ?? 0
+  const config = walletFile.getConfig()
+  const dp = config.decimalPlaces ?? 0
+  const subs = config.subscriptions ?? []
+  const today = toDateString(new Date())
+  const reminderDays = config.billReminderDays ?? 3
+  const bills = upcomingCharges(subs, today, reminderDays)
+  const next = nextChargeAfter(subs, today, bills)
   const card = renderCard(parent, { className: 'pw-bills-card' })
   card.dataset['testid'] = 'upcoming-bills'
   const head = card.createDiv('pw-card-title pw-bills-title')
@@ -78,6 +85,21 @@ export function renderUpcomingBills(
     skipBtn.addEventListener('click', () => {
       skipBtn.disabled = true
       void markChargeHandled(walletFile, sub.id, date).then(() => refresh(app))
+    })
+  }
+
+  if (bills.length === 0) {
+    const empty = card.createDiv('pw-bills-empty')
+    empty.createDiv({ text: noneDueText(reminderDays) })
+    if (next) {
+      empty.createDiv({
+        text: tn('dash.billNext', { name: next.sub.name, date: formatMonthDay(next.date), amount: formatAmount(next.sub.amount, dp) }),
+      })
+    }
+  } else if (next) {
+    card.createDiv({
+      text: tn('dash.billNextAfter', { name: next.sub.name, date: formatMonthDay(next.date) }),
+      cls: 'pw-bills-later',
     })
   }
 }

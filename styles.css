@@ -2941,6 +2941,43 @@ select.pw-validation-remap-select option {
 
 
 /* ── Upcoming bills (overview) ─────────────────────────────────────────── */
+.pw-left-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.pw-left-bottom > .pw-card {
+  margin-bottom: 0;
+}
+
+.pw-left-bottom > .pw-inc-exp-card {
+  flex: 3 1 360px;
+}
+
+.pw-left-bottom > .pw-bills-card {
+  flex: 2 1 260px;
+  min-width: 0;
+}
+
+.pw-bills-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 4px 2px;
+}
+
+.pw-bills-later {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .pw-bills-title {
   display: flex;
   justify-content: space-between;
@@ -2984,6 +3021,10 @@ select.pw-validation-remap-select option {
 .pw-bills-meta {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.pw-bills-meta > span {
+  white-space: nowrap;
 }
 
 .pw-bills-row.is-today .pw-bills-due {

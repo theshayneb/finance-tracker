@@ -138,7 +138,6 @@ describe('validateTransactionForm', () => {
     followUpTag: '',
     subscriptions: [],
     billReminderDays: 3,
-    billReminderNotice: true,
     folderName: 'PennyWallet',
     autoValidateOnLoad: true,
     options: {} as never,

@@ -602,16 +602,6 @@ export class PennyWalletSettingTab extends PluginSettingTab {
           this.app.workspace.trigger('penny-wallet-mod:refresh')
         })
       })
-
-    new Setting(group)
-      .setName(t('settings.billReminderNotice'))
-      .setDesc(t('settings.billReminderNoticeDesc'))
-      .addToggle(toggle => toggle
-        .setValue(config.billReminderNotice ?? true)
-        .onChange(async (value) => {
-          this.walletFile.updateConfig({ billReminderNotice: value })
-          await this.walletFile.saveConfig()
-        }))
   }
 
   private openSubscriptionModal(sub: Subscription | null) {

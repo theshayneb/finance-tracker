@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  chargeDate, daysBetween, dueChargeDates, hasMatchingCharge, isValidDateString, monthlyCost,
+  chargeDate, daysBetween, dueChargeDates, hasMatchingCharge, isValidDateString, monthlyCost, nextChargeAfter,
   nextChargeDate, subscriptionTransaction, upcomingCharges, validateSubscriptionName,
 } from '../../src/subscriptions'
 import { recordDueSubscriptions, markChargeHandled } from '../../src/subscriptionRecorder'
@@ -65,6 +65,25 @@ describe('upcomingCharges', () => {
       sub({ id: 'b', name: 'Auto', startDate: '2026-11-10' }),
     ]
     expect(upcomingCharges(subs, today, 3).map(c => [c.sub.name, c.days])).toEqual([['Manual', -6]])
+  })
+})
+
+describe('nextChargeAfter', () => {
+  const today = '2026-11-16'
+  const subs = [
+    sub({ id: 'a', name: 'A', startDate: '2026-11-17' }),
+    sub({ id: 'b', name: 'B', startDate: '2026-12-02' }),
+    sub({ id: 'c', name: 'C', startDate: '2026-11-25' }),
+  ]
+
+  it('skips the bills already listed', () => {
+    const listed = upcomingCharges(subs, today, 3)
+    expect(nextChargeAfter(subs, today, listed)).toMatchObject({ date: '2026-11-25', sub: { name: 'C' } })
+  })
+
+  it('gives the soonest charge when nothing is listed', () => {
+    expect(nextChargeAfter(subs, today, [])?.sub.name).toBe('A')
+    expect(nextChargeAfter([], today, [])).toBeNull()
   })
 })
 

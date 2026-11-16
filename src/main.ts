@@ -14,10 +14,6 @@ import { formatAmount, parseTagList } from './utils'
 import { SubscriptionModal } from './modal/SubscriptionModal'
 import { recordDueSubscriptions, saveSubscription } from './subscriptionRecorder'
 import { toDateString } from './subscriptions'
-import { formatDueIn, getUpcomingBills } from './view/UpcomingBills'
-
-/** Device-local (not synced) record of the day the bill reminder last popped up. */
-const REMINDER_SHOWN_KEY = 'penny-wallet-mod:bill-reminder-shown'
 // Wait after startup so Obsidian Sync can bring in charges another device already recorded.
 const SUBSCRIPTION_STARTUP_DELAY_MS = 15_000
 const SUBSCRIPTION_CHECK_INTERVAL_MS = 60 * 60 * 1000
@@ -32,6 +28,7 @@ function noticeLines(heading: string, lines: string[]): DocumentFragment {
 
 export default class PennyWalletPlugin extends Plugin {
   walletFile!: WalletFile
+  private lastSubscriptionCheckDay = ''
 
   async onload() {
     initI18n()
@@ -128,25 +125,23 @@ export default class PennyWalletPlugin extends Plugin {
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
 
-  /** Records due subscription charges, then pops up the daily reminder of bills due soon. */
+  /**
+   * Records due subscription charges. Also refreshes the views when the day has
+   * changed, so the overview's Upcoming bills card stays current in an Obsidian
+   * that is never closed.
+   */
   async checkSubscriptions() {
     try {
       const dp = this.walletFile.getConfig().decimalPlaces ?? 0
-      const recorded = await recordDueSubscriptions(this.walletFile, toDateString(new Date()))
+      const today = toDateString(new Date())
+      const newDay = this.lastSubscriptionCheckDay !== '' && this.lastSubscriptionCheckDay !== today
+      this.lastSubscriptionCheckDay = today
+      const recorded = await recordDueSubscriptions(this.walletFile, today)
       if (recorded.length > 0) {
         const lines = recorded.map(({ sub, date }) => `${sub.name} · ${date} · ${formatAmount(sub.amount, dp)}`)
         new Notice(noticeLines(t('notice.subscriptionsRecorded'), lines), 10000)
-        this.refreshViews()
       }
-
-      const config = this.walletFile.getConfig()
-      const today = toDateString(new Date())
-      if (!(config.billReminderNotice ?? true) || this.app.loadLocalStorage(REMINDER_SHOWN_KEY) === today) return
-      const bills = getUpcomingBills(this.walletFile)
-      if (bills.length === 0) return
-      const lines = bills.map(({ sub, days }) => `${sub.name} · ${formatDueIn(days)} · ${formatAmount(sub.amount, dp)}`)
-      new Notice(noticeLines(t('notice.billsComingUp'), lines), 15000)
-      this.app.saveLocalStorage(REMINDER_SHOWN_KEY, today)
+      if (recorded.length > 0 || newDay) this.refreshViews()
     } catch (e) {
       console.error('Finance Tracker: subscription check failed', e)
     }

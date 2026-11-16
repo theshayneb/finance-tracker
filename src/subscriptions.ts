@@ -89,6 +89,23 @@ export function upcomingCharges(subs: readonly Subscription[], today: string, re
   return result.sort((a, b) => a.date.localeCompare(b.date) || a.sub.name.localeCompare(b.sub.name))
 }
 
+/** The soonest charge after today that `listed` doesn't already show; null if none. */
+export function nextChargeAfter(
+  subs: readonly Subscription[],
+  today: string,
+  listed: readonly UpcomingCharge[],
+): { sub: Subscription; date: string } | null {
+  const shown = new Set(listed.map(c => c.sub.id))
+  let best: { sub: Subscription; date: string } | null = null
+  for (const sub of subs) {
+    if (shown.has(sub.id)) continue
+    const date = nextChargeDate(sub)
+    if (!date || date <= today) continue
+    if (!best || date < best.date || (date === best.date && sub.name < best.sub.name)) best = { sub, date }
+  }
+  return best
+}
+
 /** Cost spread over a month, for the "about X a month" total. */
 export function monthlyCost(sub: Subscription): number {
   return sub.amount / FREQUENCY_MONTHS[sub.frequency]
