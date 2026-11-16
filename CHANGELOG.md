@@ -2,6 +2,11 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.52] - 2026-11-16
+
+### Changed
+- Overview cards line up in a grid. **Budgets** / **Follow-ups** and **Monthly expenses** / **Upcoming bills** split their row at the same point, and each row's cards share one height with the pie chart beside them. The expenses chart grows to fill its card.
+
 ## [0.0.51] - 2026-11-16
 
 ### Changed

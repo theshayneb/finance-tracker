@@ -1221,12 +1221,6 @@ button.pw-mobile-calculator-done {
   padding: 0 20px 20px;
 }
 
-.pw-grid-right {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 /* Bar chart card — flex so chart-wrap fills height */
 .pw-inc-exp-card {
   display: flex;
@@ -2211,6 +2205,14 @@ select.pw-add-wallet-input {
     padding: 0 12px 20px;
   }
 
+  .pw-grid-left,
+  .pw-grid-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    grid-row: auto;
+  }
+
   .pw-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 12px;
@@ -2538,20 +2540,36 @@ select.pw-add-wallet-input {
 }
 
 /* Left column of the Overview grid: budgets, then the bar chart */
-.pw-grid-left {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Both columns share the grid's two rows (subgrid), so the budgets row lines up
+   with the category pie and the chart row with the tag pie, top and bottom. */
+.pw-grid-left,
+.pw-grid-right {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
   min-width: 0;
 }
 
-.pw-grid-left > .pw-card {
+/* Only one row on the left (no budgets or follow-ups): it spans both */
+.pw-grid-left > :only-child {
+  grid-row: span 2;
+}
+
+.pw-grid-left > .pw-card,
+.pw-grid-right > .pw-card {
   margin-bottom: 0;
 }
 
+/* The chart grows to fill its row; the canvas is taken out of flow so its
+   size can't feed back into the row height. */
 .pw-grid-left .pw-inc-exp-card .pw-chart-wrap {
-  height: 260px;
-  flex: none;
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.pw-grid-left .pw-inc-exp-card .pw-chart-wrap canvas {
+  position: absolute;
+  inset: 0;
 }
 
 .pw-dash-budget-card {
@@ -2953,12 +2971,14 @@ select.pw-validation-remap-select option {
 }
 
 .pw-left-bottom > .pw-inc-exp-card {
-  flex: 3 1 360px;
+  flex: 5 1 0;
+  min-width: 260px;
 }
 
+/* Same split and wrap point as Budgets / Follow-ups above, so the cards line up */
 .pw-left-bottom > .pw-bills-card {
-  flex: 2 1 260px;
-  min-width: 0;
+  flex: 3 1 0;
+  min-width: 200px;
 }
 
 .pw-bills-empty {
