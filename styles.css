@@ -2939,3 +2939,73 @@ select.pw-validation-remap-select option {
   border-bottom: none;
 }
 
+
+/* ── Upcoming bills (overview) ─────────────────────────────────────────── */
+.pw-bills-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.pw-bills-manage {
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.pw-bills-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pw-bills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.pw-bills-row:last-child {
+  border-bottom: none;
+}
+
+.pw-bills-main {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.pw-bills-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pw-bills-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pw-bills-row.is-today .pw-bills-due {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.pw-bills-row.is-overdue .pw-bills-due {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+.pw-bills-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pw-bills-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pw-subscription-total {
+  padding: 8px 0;
+}

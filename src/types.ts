@@ -20,6 +20,23 @@ export interface Budget {
   amount: number  // monthly amount; resets every month
 }
 
+export type SubscriptionFrequency = 'monthly' | 'quarterly' | 'yearly'
+
+/** A recurring bill; each charge is recorded as an expense on its date. */
+export interface Subscription {
+  id: string
+  name: string            // also the note on the recorded expense
+  amount: number
+  frequency: SubscriptionFrequency
+  startDate: string       // yyyy-mm-dd: the first charge; later ones follow from its day of the month
+  wallet: string
+  category: string
+  tags?: string[]
+  budget?: string
+  autoRecord: boolean     // false: only remind; the charge is recorded by hand
+  lastRecorded?: string   // yyyy-mm-dd of the latest charge recorded or skipped
+}
+
 export interface Wallet {
   name: string
   type: WalletType
@@ -65,6 +82,9 @@ export interface PennyWalletConfig {
   autoValidateOnLoad: boolean
   chartExcludedTags: string[]  // tags left out of the Overview's tag chart
   followUpTag: string          // tag listed in the Overview's Follow-ups card ('' = hide it)
+  subscriptions: Subscription[]
+  billReminderDays: number     // how many days ahead upcoming bills are shown
+  billReminderNotice: boolean  // also pop up a notice (once a day) about upcoming bills
 }
 
 export interface TransactionModalParams {
@@ -136,6 +156,9 @@ export const DEFAULT_CONFIG: PennyWalletConfig = {
   autoValidateOnLoad: true,
   chartExcludedTags: ['follow_up'],
   followUpTag: 'follow_up',
+  subscriptions: [],
+  billReminderDays: 3,
+  billReminderNotice: true,
 }
 
 export interface FrontmatterIssue {

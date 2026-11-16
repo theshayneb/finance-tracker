@@ -2,6 +2,15 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.49] - 2026-11-16
+
+### Added
+- Subscriptions and recurring bills. Add them under **Settings → Subscriptions and bills** (or with the "Add subscription or recurring bill" command): name, amount, monthly / every 3 months / yearly, next charge date, account, category, and optionally a budget and tags.
+- Each charge is recorded as an expense on its date automatically, with the subscription's name as the note. Charges missed while Obsidian was closed are filled in the next time it opens. A charge that is already in the month (for example recorded on another device before syncing) isn't added twice.
+- Bills can be set to remind only, for bills whose amount changes: they show on the overview with **Record** (opens the transaction form, pre-filled) and **Skip**, and stay there while overdue.
+- **Upcoming bills** card on the overview lists bills due in the next few days (3 by default; change it in settings). A notice also lists them the first time Obsidian opens each day; it can be turned off.
+- The settings list shows each bill's next charge date and the total cost per month.
+
 ## [0.0.48] - 2026-11-09
 
 ### Added

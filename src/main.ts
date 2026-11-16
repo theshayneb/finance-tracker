@@ -1,4 +1,4 @@
-import { Notice, ObsidianProtocolData, Platform, Plugin, WorkspaceLeaf } from 'obsidian'
+import { Events, Notice, ObsidianProtocolData, Platform, Plugin, WorkspaceLeaf } from 'obsidian'
 import { WalletFile } from './io/WalletFile'
 import { TransactionModal } from './modal/TransactionModal'
 import { MobileTransactionModal } from './modal/MobileTransactionModal'
@@ -10,7 +10,25 @@ import { PennyWalletSettingTab } from './settings/SettingTab'
 import { ValidationModal } from './modal/ValidationModal'
 import { TransactionModalParams, TransactionType } from './types'
 import { initI18n, t, translateCategory } from './i18n'
-import { parseTagList } from './utils'
+import { formatAmount, parseTagList } from './utils'
+import { SubscriptionModal } from './modal/SubscriptionModal'
+import { recordDueSubscriptions, saveSubscription } from './subscriptionRecorder'
+import { toDateString } from './subscriptions'
+import { formatDueIn, getUpcomingBills } from './view/UpcomingBills'
+
+/** Device-local (not synced) record of the day the bill reminder last popped up. */
+const REMINDER_SHOWN_KEY = 'penny-wallet-mod:bill-reminder-shown'
+// Wait after startup so Obsidian Sync can bring in charges another device already recorded.
+const SUBSCRIPTION_STARTUP_DELAY_MS = 15_000
+const SUBSCRIPTION_CHECK_INTERVAL_MS = 60 * 60 * 1000
+
+/** A notice with a heading line and one line per item. */
+function noticeLines(heading: string, lines: string[]): DocumentFragment {
+  return createFragment(frag => {
+    frag.createDiv({ text: heading })
+    for (const line of lines) frag.createDiv({ text: `• ${line}` })
+  })
+}
 
 export default class PennyWalletPlugin extends Plugin {
   walletFile!: WalletFile
@@ -40,6 +58,13 @@ export default class PennyWalletPlugin extends Plugin {
     this.addCommand({ id: 'open-detail', name: 'Open transactions', callback: () => { void this.openDetailView() } })
     this.addCommand({ id: 'open-budgets', name: 'Open budgets', callback: () => { void this.openOrRevealView(BUDGET_VIEW_TYPE) } })
     this.addCommand({ id: 'add-transaction', name: 'Add transaction', callback: () => this.openTransactionModal() })
+    this.addCommand({ id: 'add-subscription', name: 'Add subscription or recurring bill', callback: () => {
+      new SubscriptionModal(this.app, this.walletFile, null, async (saved) => {
+        await saveSubscription(this.walletFile, saved)
+        await this.checkSubscriptions()
+        this.refreshViews()
+      }).open()
+    } })
     this.addCommand({ id: 'validate-data', name: 'Validate data', callback: () => void this.runValidation(true) })
     this.addCommand({ id: 'refresh', name: 'Refresh views', callback: () => {
       this.app.workspace.trigger('penny-wallet-mod:refresh')
@@ -69,6 +94,15 @@ export default class PennyWalletPlugin extends Plugin {
       if (this.walletFile.getConfig().autoValidateOnLoad) {
         void this.runValidation(false)
       }
+
+      this.app.workspace.onLayoutReady(() => {
+        const timer = window.setTimeout(() => { void this.checkSubscriptions() }, SUBSCRIPTION_STARTUP_DELAY_MS)
+        this.register(() => window.clearTimeout(timer))
+      })
+      this.registerInterval(window.setInterval(() => { void this.checkSubscriptions() }, SUBSCRIPTION_CHECK_INTERVAL_MS))
+      this.registerEvent((this.app.workspace as Events).on('penny-wallet-mod:subscriptions-changed', () => {
+        void this.checkSubscriptions()
+      }))
     } catch (e) {
       console.error('Finance Tracker: failed to load config', e)
       new Notice(t('notice.loadFailed'))
@@ -90,6 +124,32 @@ export default class PennyWalletPlugin extends Plugin {
       return
     }
     new ValidationModal(this.app, this.walletFile, issues).open()
+  }
+
+  // ── Subscriptions ─────────────────────────────────────────────────────────
+
+  /** Records due subscription charges, then pops up the daily reminder of bills due soon. */
+  async checkSubscriptions() {
+    try {
+      const dp = this.walletFile.getConfig().decimalPlaces ?? 0
+      const recorded = await recordDueSubscriptions(this.walletFile, toDateString(new Date()))
+      if (recorded.length > 0) {
+        const lines = recorded.map(({ sub, date }) => `${sub.name} · ${date} · ${formatAmount(sub.amount, dp)}`)
+        new Notice(noticeLines(t('notice.subscriptionsRecorded'), lines), 10000)
+        this.refreshViews()
+      }
+
+      const config = this.walletFile.getConfig()
+      const today = toDateString(new Date())
+      if (!(config.billReminderNotice ?? true) || this.app.loadLocalStorage(REMINDER_SHOWN_KEY) === today) return
+      const bills = getUpcomingBills(this.walletFile)
+      if (bills.length === 0) return
+      const lines = bills.map(({ sub, days }) => `${sub.name} · ${formatDueIn(days)} · ${formatAmount(sub.amount, dp)}`)
+      new Notice(noticeLines(t('notice.billsComingUp'), lines), 15000)
+      this.app.saveLocalStorage(REMINDER_SHOWN_KEY, today)
+    } catch (e) {
+      console.error('Finance Tracker: subscription check failed', e)
+    }
   }
 
   // ── Open Views ──────────────────────────────────────────────────────────────

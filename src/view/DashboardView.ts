@@ -9,6 +9,7 @@ import { Transaction, TransactionType } from '../types'
 import { DETAIL_VIEW_TYPE } from './DetailView'
 import { renderSharedHeader, switchView } from './SharedHeader'
 import { openTransactionEditor, renderNoteWithLinks, renderTransactionRow } from './txShared'
+import { getUpcomingBills, renderUpcomingBills } from './UpcomingBills'
 import { Chart } from 'chart.js'
 import { MonthData, OTHER_COLOR, assignCategoryColors, drawExpenseChart, drawPie, getMonthRangeEndingAt, getThemeColors, rankCategories } from './charts'
 
@@ -100,6 +101,12 @@ export class DashboardView extends ItemView {
     // ── 2-column grid: budgets + bar chart left, pie charts right ───────────
     const grid2 = contentEl.createDiv('pw-grid-2')
     const gridLeft = grid2.createDiv('pw-grid-left')
+
+    // Bills due in the next few days (relative to today, so only on this month's page)
+    if (this.currentYearMonth === currentYearMonth()) {
+      const bills = getUpcomingBills(this.walletFile)
+      if (bills.length > 0) renderUpcomingBills(gridLeft, this.app, this.walletFile, bills, () => this.openSettings())
+    }
 
     // Budgets with the follow-up list beside them (they wrap when the column is narrow)
     const hasBudgets = (this.walletFile.getConfig().budgets ?? []).length > 0
@@ -205,6 +212,12 @@ export class DashboardView extends ItemView {
         if (!line.querySelector('.pw-tx-tag-chip')) line.remove()
       })
     }
+  }
+
+  private openSettings() {
+    const setting = (this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting
+    setting.open()
+    setting.openTabById('penny-wallet-mod')
   }
 
   /** UNTAGGED_KEY shows expenses with no tags; '' ("Other") opens all of the month's expenses. */

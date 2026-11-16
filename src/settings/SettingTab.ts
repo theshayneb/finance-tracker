@@ -3,8 +3,12 @@ import Sortable from 'sortablejs'
 import { WalletFile } from '../io/WalletFile'
 import { ConfirmModal } from '../modal/ConfirmModal'
 import { WalletEditModal } from '../modal/WalletEditModal'
-import { Budget, Wallet, WalletBalance, WalletType } from '../types'
+import { SubscriptionModal } from '../modal/SubscriptionModal'
+import { Budget, Subscription, Wallet, WalletBalance, WalletType } from '../types'
 import { validateBudgetName } from '../budget'
+import { monthlyCost, nextChargeDate } from '../subscriptions'
+import { saveSubscription } from '../subscriptionRecorder'
+import { formatAmount } from '../utils'
 import { t, tn, translateCategory } from '../i18n'
 
 export class PennyWalletSettingTab extends PluginSettingTab {
@@ -33,6 +37,7 @@ export class PennyWalletSettingTab extends PluginSettingTab {
       this.renderArchivedWallets()
       this.renderAddWallet()
       this.renderBudgets()
+      this.renderSubscriptions()
       this.renderTags()
       this.renderCategories()
 
@@ -522,6 +527,102 @@ export class PennyWalletSettingTab extends PluginSettingTab {
         if (e.key === 'Enter') { e.preventDefault(); void submit() }
       })
     }
+  }
+
+  private async saveSubscriptions(subscriptions: Subscription[]): Promise<void> {
+    this.walletFile.updateConfig({ subscriptions })
+    await this.walletFile.saveConfig()
+    this.app.workspace.trigger('penny-wallet-mod:subscriptions-changed')
+    this.app.workspace.trigger('penny-wallet-mod:refresh')
+  }
+
+  private renderSubscriptions() {
+    const { containerEl } = this
+    const config = this.walletFile.getConfig()
+    const dp = config.decimalPlaces ?? 0
+    new Setting(containerEl)
+      .setName(t('settings.subscriptions'))
+      .setDesc(t('settings.subscriptionsDesc'))
+      .setHeading()
+
+    const subs = [...(config.subscriptions ?? [])].sort((a, b) =>
+      (nextChargeDate(a) ?? '').localeCompare(nextChargeDate(b) ?? '') || a.name.localeCompare(b.name))
+    const group = containerEl.createDiv('pw-settings-group pw-subscription-list')
+    if (subs.length === 0) {
+      group.createEl('p', { text: t('settings.noSubscriptions'), cls: 'pw-settings-empty' })
+    }
+
+    for (const sub of subs) {
+      const amount = formatAmount(sub.amount, dp)
+      const per = sub.frequency === 'yearly' ? 'sub.perYearly' : sub.frequency === 'quarterly' ? 'sub.perQuarterly' : 'sub.perMonthly'
+      const next = nextChargeDate(sub)
+      const desc = [tn(per, { amount }), next ? tn('settings.subscriptionNext', { date: next }) : '']
+      if (!sub.autoRecord) desc.push(t('settings.subscriptionManual'))
+      new Setting(group)
+        .setName(sub.name)
+        .setDesc(desc.filter(Boolean).join(' · '))
+        .addButton(btn => btn
+          .setButtonText(t('ui.edit'))
+          .onClick(() => this.openSubscriptionModal(sub)))
+        .addButton(btn => btn
+          .setButtonText(t('ui.delete'))
+          .setWarning()
+          .onClick(() => {
+            new ConfirmModal(this.app, t('confirm.deleteSubscription'), async () => {
+              const scrollTop = this.getSettingsScrollTop()
+              await this.saveSubscriptions((this.walletFile.getConfig().subscriptions ?? []).filter(s => s.id !== sub.id))
+              this.display(scrollTop)
+            }).open()
+          }))
+    }
+
+    if (subs.length > 0) {
+      const total = subs.reduce((sum, s) => sum + monthlyCost(s), 0)
+      group.createEl('p', {
+        text: tn('settings.subscriptionsTotal', { amount: formatAmount(total, dp) }),
+        cls: 'pw-settings-empty pw-subscription-total',
+      })
+    }
+
+    new Setting(group)
+      .addButton(btn => btn
+        .setButtonText(t('settings.addSubscription'))
+        .setCta()
+        .onClick(() => this.openSubscriptionModal(null)))
+
+    new Setting(group)
+      .setName(t('settings.billReminderDays'))
+      .setDesc(t('settings.billReminderDaysDesc'))
+      .addDropdown(drop => {
+        for (let d = 0; d <= 14; d++) drop.addOption(String(d), String(d))
+        drop.setValue(String(config.billReminderDays ?? 3))
+        drop.onChange(async (value) => {
+          this.walletFile.updateConfig({ billReminderDays: Number(value) })
+          await this.walletFile.saveConfig()
+          this.app.workspace.trigger('penny-wallet-mod:refresh')
+        })
+      })
+
+    new Setting(group)
+      .setName(t('settings.billReminderNotice'))
+      .setDesc(t('settings.billReminderNoticeDesc'))
+      .addToggle(toggle => toggle
+        .setValue(config.billReminderNotice ?? true)
+        .onChange(async (value) => {
+          this.walletFile.updateConfig({ billReminderNotice: value })
+          await this.walletFile.saveConfig()
+        }))
+  }
+
+  private openSubscriptionModal(sub: Subscription | null) {
+    new SubscriptionModal(this.app, this.walletFile, sub, async (saved) => {
+      const scrollTop = this.getSettingsScrollTop()
+      await saveSubscription(this.walletFile, saved)
+      this.app.workspace.trigger('penny-wallet-mod:subscriptions-changed')
+      this.app.workspace.trigger('penny-wallet-mod:refresh')
+      new Notice(tn('notice.subscriptionSaved', { name: saved.name }))
+      this.display(scrollTop)
+    }).open()
   }
 
   private renderTags() {
