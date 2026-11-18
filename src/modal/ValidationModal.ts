@@ -2,6 +2,8 @@ import { App, Modal, Notice } from 'obsidian'
 import { WalletFile } from '../io/WalletFile'
 import type { ValidationIssue } from '../types'
 import { t, tn } from '../i18n'
+import { formatAmount } from '../utils'
+import { DETAIL_VIEW_TYPE } from '../view/DetailView'
 
 export class ValidationModal extends Modal {
   private issues: ValidationIssue[]
@@ -30,7 +32,8 @@ export class ValidationModal extends Modal {
     const content = contentEl.createDiv('pw-validation-content')
     this.renderIssues(content)
 
-    // Divider + footer
+    // Divider + footer (duplicate charges are only flagged, so not without other issues)
+    if (!this.issues.some(i => i.type !== 'duplicateCharge')) return
     contentEl.createDiv('pw-validation-divider')
     const footer = contentEl.createDiv('pw-validation-footer')
     const fixAllBtn = footer.createEl('button', {
@@ -43,6 +46,36 @@ export class ValidationModal extends Modal {
   private renderIssues(container: HTMLElement) {
     const frontmatterIssues = this.issues.filter(i => i.type === 'frontmatter')
     const orphanIssues = this.issues.filter(i => i.type === 'orphanedWallet')
+    const duplicateIssues = this.issues.filter(i => i.type === 'duplicateCharge')
+
+    // Flagged only: "Fix all" leaves these alone, and nothing here deletes a row.
+    if (duplicateIssues.length > 0) {
+      const section = container.createDiv('pw-validation-section')
+      section.dataset['testid'] = 'duplicate-charges'
+      section.createEl('span', { text: t('validation.duplicateSection'), cls: 'pw-validation-section-label' })
+      const dp = this.walletFile.getConfig().decimalPlaces ?? 0
+      for (const issue of duplicateIssues) {
+        if (issue.type !== 'duplicateCharge') continue
+        const card = section.createDiv('pw-validation-card')
+        card.createEl('p', {
+          text: tn('validation.duplicateDesc', {
+            month: issue.yearMonth,
+            name: issue.name,
+            count: String(issue.transactions.length),
+            date: issue.date,
+          }),
+          cls: 'pw-validation-card-text',
+        })
+        const rows = card.createDiv('pw-validation-dup-rows')
+        for (const tx of issue.transactions) {
+          rows.createDiv({ text: [tx.date, tx.wallet ?? '', formatAmount(tx.amount, dp)].filter(Boolean).join(' · ') })
+        }
+        const cardFooter = card.createDiv('pw-validation-card-footer')
+        const btn = cardFooter.createEl('button', { text: t('validation.showInTransactions'), cls: 'pw-validation-fix-btn' })
+        btn.addEventListener('click', () => void this.showInTransactions(issue.yearMonth, issue.name))
+      }
+      section.createEl('p', { text: t('validation.duplicateHint'), cls: 'pw-validation-dup-hint' })
+    }
 
     if (frontmatterIssues.length > 0) {
       const sectionA = container.createDiv('pw-validation-section')
@@ -105,6 +138,13 @@ export class ValidationModal extends Modal {
         })())
       }
     }
+  }
+
+  private async showInTransactions(yearMonth: string, note: string) {
+    const leaf = this.app.workspace.getLeavesOfType(DETAIL_VIEW_TYPE)[0] ?? this.app.workspace.getLeaf('tab')
+    await leaf.setViewState({ type: DETAIL_VIEW_TYPE, active: true, state: { yearMonth, filterSearch: note, resetFilters: true } })
+    void this.app.workspace.revealLeaf(leaf)
+    this.close()
   }
 
   private async fixAll() {

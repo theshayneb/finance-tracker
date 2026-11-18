@@ -12,7 +12,17 @@ import {
   DEFAULT_TRANSFER_CATEGORIES,
 } from '../types'
 import { tagKey } from '../utils'
-import type { Wallet, FrontmatterIssue, OrphanedWalletIssue, ValidationIssue } from '../types'
+import type { Wallet, FrontmatterIssue, OrphanedWalletIssue, ValidationIssue, DuplicateChargeIssue, Subscription } from '../types'
+import { liveConfig, mergeStored, sameStored, stampChanges, toStored, type StoredConfig } from '../configMerge'
+import { t } from '../i18n'
+
+/** A row being edited or deleted is no longer in its month file, e.g. changed on another device. */
+export class TransactionChangedError extends Error {
+  constructor() {
+    super(t('err.transactionChanged'))
+    this.name = 'TransactionChangedError'
+  }
+}
 
 const ROOT_CONFIG_PATH = normalizePath('.penny-wallet.json')
 const TABLE_HEADER = `| Date | Type | Wallet | From | To | Category | Note | Tags | Amount | CreatedAt | Budget |
@@ -194,6 +204,31 @@ export function detectOrphanedWallets(
   }))
 }
 
+/**
+ * Subscription charges recorded more than once: expenses on the same date whose
+ * note is the same subscription's name (any amount). Only flagged, never removed.
+ */
+export function detectDuplicateCharges(
+  monthData: Map<string, Transaction[]>,
+  subscriptions: readonly Subscription[],
+): DuplicateChargeIssue[] {
+  const names = new Set(subscriptions.map(s => s.name))
+  const issues: DuplicateChargeIssue[] = []
+  for (const [yearMonth, txs] of [...monthData].sort(([a], [b]) => a.localeCompare(b))) {
+    const groups = new Map<string, Transaction[]>()
+    for (const tx of txs) {
+      if (tx.type !== 'expense' || !names.has(tx.note)) continue
+      const key = `${tx.date}\u0000${tx.note}`
+      groups.set(key, [...(groups.get(key) ?? []), tx])
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      issues.push({ type: 'duplicateCharge', yearMonth, date: group[0].date, name: group[0].note, transactions: group })
+    }
+  }
+  return issues
+}
+
 // ─── WalletFile class ─────────────────────────────────────────────────────────
 
 function txDateOrder(a: Transaction, b: Transaction): number {
@@ -201,16 +236,26 @@ function txDateOrder(a: Transaction, b: Transaction): number {
   return d !== 0 ? d : (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
 }
 
-/** Where settings are persisted; the plugin passes its loadData/saveData (data.json). */
+/**
+ * Where settings are persisted; the plugin passes its loadData/saveData (data.json).
+ * The backup is this device's own copy of the last merged settings (not synced),
+ * so edits that only this device's memory held survive a restart after Sync
+ * replaced data.json with another device's older copy.
+ */
 export interface ConfigStore {
   load(): Promise<unknown>
-  save(config: PennyWalletConfig): Promise<void>
+  save(config: StoredConfig): Promise<void>
+  loadBackup?(): unknown
+  saveBackup?(config: StoredConfig): void
 }
 
 export class WalletFile {
   private app: App
   private configStore: ConfigStore | null
   private config: PennyWalletConfig = { ...DEFAULT_CONFIG }
+  /** The last saved or merged copy, with edit times and tombstones (see configMerge). */
+  private stored: StoredConfig = toStored(DEFAULT_CONFIG)
+  private configQueue: Promise<unknown> = Promise.resolve()
   private createdDefaultConfigOnLastLoad = false
 
   /** Without a store, settings live in the legacy .penny-wallet.json (used by tests). */
@@ -228,11 +273,15 @@ export class WalletFile {
   async loadConfig(): Promise<PennyWalletConfig> {
     this.createdDefaultConfigOnLastLoad = false
 
-    // 1. Plugin data (data.json) — the synced location.
+    // 1. Plugin data (data.json) — the synced location — merged with this
+    //    device's backup of the last merged copy.
     if (this.configStore) {
-      const stored = await this.configStore.load()
-      if (stored && typeof stored === 'object' && Object.keys(stored).length > 0) {
-        this.config = this.fromParsed(stored as Partial<PennyWalletConfig>)
+      const disk = await this.readStored()
+      if (disk) {
+        const backup = this.readBackup()
+        const merged = backup ? mergeStored(disk, backup) : disk
+        this.adopt(merged)
+        if (!sameStored(merged, disk)) await this.writeStored(merged)
         return this.config
       }
     }
@@ -242,25 +291,65 @@ export class WalletFile {
     const legacy = await this.readLegacyConfig()
     if (legacy !== null) {
       if (legacy === 'malformed') {
-        this.config = { ...DEFAULT_CONFIG }
+        this.adopt(toStored(DEFAULT_CONFIG))
         return this.config
       }
-      this.config = this.fromParsed(legacy)
-      if (this.configStore) await this.saveConfig()
+      this.adopt(this.normalizeStored(legacy))
+      if (this.configStore) await this.writeStored(this.stored)
       return this.config
     }
 
-    // 3. Truly first launch: create locale-aware default config
+    // 3. Truly first launch: locale-aware defaults. With a config store they are
+    //    not saved until something is edited: on a new device whose data.json
+    //    hasn't synced in yet, a saved default copy could replace the real one.
     await this.ensureFolder()
     const cashName = this.getLocaleCashName()
-    this.config = {
+    this.adopt(toStored({
       ...DEFAULT_CONFIG,
       wallets: [{ ...DEFAULT_CONFIG.wallets[0], name: cashName }],
       defaultWallet: cashName,
-    }
-    await this.saveConfig()
+    }))
+    if (!this.configStore) await this.writeStored(this.stored)
     this.createdDefaultConfigOnLastLoad = true
     return this.config
+  }
+
+  /** A stored copy from data.json or the legacy file, normalized like any loaded config. */
+  private normalizeStored(raw: unknown): StoredConfig {
+    return toStored(this.fromParsed(raw as Partial<PennyWalletConfig>) as unknown as StoredConfig)
+  }
+
+  /** What is saved now, or null if nothing (or nothing readable) is. */
+  private async readStored(): Promise<StoredConfig | null> {
+    if (this.configStore) {
+      const raw = await this.configStore.load()
+      return raw && typeof raw === 'object' && Object.keys(raw).length > 0 ? this.normalizeStored(raw) : null
+    }
+    const legacy = await this.readLegacyConfig()
+    return legacy && legacy !== 'malformed' ? this.normalizeStored(legacy) : null
+  }
+
+  private readBackup(): StoredConfig | null {
+    try {
+      const raw = this.configStore?.loadBackup?.()
+      return raw && typeof raw === 'object' && Object.keys(raw).length > 0 ? this.normalizeStored(raw) : null
+    } catch {
+      return null
+    }
+  }
+
+  private async writeStored(stored: StoredConfig): Promise<void> {
+    if (this.configStore) {
+      await this.configStore.save(stored)
+      return
+    }
+    await this.vaultWrite(ROOT_CONFIG_PATH, JSON.stringify(stored, null, 2), true)
+  }
+
+  private adopt(stored: StoredConfig): void {
+    this.stored = stored
+    this.config = liveConfig(stored)
+    try { this.configStore?.saveBackup?.(stored) } catch { /* backup is best effort */ }
   }
 
   private fromParsed(parsed: Partial<PennyWalletConfig>): PennyWalletConfig {
@@ -368,13 +457,37 @@ export class WalletFile {
     await this.saveConfig()
   }
 
-  async saveConfig(): Promise<void> {
-    if (this.configStore) {
-      await this.configStore.save(this.config)
-      return
-    }
-    const content = JSON.stringify(this.config, null, 2)
-    await this.vaultWrite(ROOT_CONFIG_PATH, content, true)
+  /**
+   * Saves the config: stamps what changed since the last save, reads what is
+   * saved now (another device's copy may have synced in), merges the two per
+   * entry, and writes the result if it differs from what is saved.
+   */
+  saveConfig(): Promise<void> {
+    return this.syncConfig()
+  }
+
+  /**
+   * After data.json changed on disk (synced from another device): merges it with
+   * this device's settings instead of replacing them, and saves the result if it
+   * differs, so this device's newer edits aren't lost to an older copy.
+   */
+  reconcileConfig(): Promise<void> {
+    return this.syncConfig()
+  }
+
+  private syncConfig(): Promise<void> {
+    const run = this.configQueue.then(async () => {
+      const start = this.config
+      const local = stampChanges(this.stored, start, Date.now())
+      const disk = await this.readStored()
+      let merged = disk ? mergeStored(local, disk) : local
+      if (!disk || !sameStored(merged, disk)) await this.writeStored(merged)
+      // Edited while this ran: keep that edit (the save that follows it writes it).
+      if (this.config !== start) merged = mergeStored(merged, stampChanges(local, this.config, Date.now()))
+      this.adopt(merged)
+    })
+    this.configQueue = run.catch(() => undefined)
+    return run
   }
 
   getConfig(): PennyWalletConfig {
@@ -425,10 +538,33 @@ export class WalletFile {
     return null
   }
 
-  private async writeMonthFile(yearMonth: string, content: string): Promise<void> {
-    await this.ensureFolder()
+  /**
+   * Edits a month file in one step against its current content (vault.process),
+   * so rows that Sync wrote in meanwhile are kept. `edit` gets the month's rows
+   * and returns the new rows, or null to leave the file as it is. It must not
+   * have side effects other than recording what it saw: it can run twice.
+   */
+  private async modifyMonth(yearMonth: string, edit: (transactions: Transaction[]) => Transaction[] | null): Promise<void> {
+    const apply = (data: string): string => {
+      const updated = edit(parseMonthFile(data))
+      return updated === null ? data : buildMonthContent(yearMonth, updated, this.computeSummary(updated))
+    }
     const path = this.monthFilePath(yearMonth)
-    await this.vaultWrite(path, content)
+    const file = this.app.vault.getFileByPath(path)
+    if (file) {
+      await this.app.vault.process(file, apply)
+      return
+    }
+    const content = apply('')
+    if (!content) return
+    await this.ensureFolder()
+    try {
+      await this.app.vault.create(path, content)
+    } catch (e: unknown) {
+      if (!(e instanceof Error) || !e.message?.includes('already exists')) throw e
+      const retryFile = this.app.vault.getFileByPath(path)
+      if (retryFile) await this.app.vault.process(retryFile, apply)
+    }
   }
 
   private async vaultWrite(path: string, content: string, adapterFallback = false): Promise<void> {
@@ -473,16 +609,34 @@ export class WalletFile {
    * `yearMonth` is "yyyy-mm".
    */
   async writeTransaction(tx: Transaction, yearMonth: string): Promise<void> {
-    const content = await this.readMonthFile(yearMonth)
-    const transactions = content ? parseMonthFile(content) : []
-    transactions.push({ ...tx, createdAt: tx.createdAt ?? new Date().toISOString() })
-    transactions.sort(txDateOrder)
+    const added = { ...tx, createdAt: tx.createdAt ?? new Date().toISOString() }
+    await this.modifyMonth(yearMonth, transactions => [...transactions, added].sort(txDateOrder))
     if (tx.tags?.length) {
       this.mergeTags(tx.tags)
       await this.saveConfig()
     }
-    const summary = this.computeSummary(transactions)
-    await this.writeMonthFile(yearMonth, buildMonthContent(yearMonth, transactions, summary))
+  }
+
+  /**
+   * Writes `tx` unless `isPresent` finds it among the month's rows, checked in the
+   * same step as the write. Returns whether it was written.
+   */
+  async writeTransactionIfAbsent(
+    tx: Transaction,
+    yearMonth: string,
+    isPresent: (transactions: Transaction[]) => boolean,
+  ): Promise<boolean> {
+    const added = { ...tx, createdAt: tx.createdAt ?? new Date().toISOString() }
+    let written = false
+    await this.modifyMonth(yearMonth, transactions => {
+      written = !isPresent(transactions)
+      return written ? [...transactions, added].sort(txDateOrder) : null
+    })
+    if (written && tx.tags?.length) {
+      this.mergeTags(tx.tags)
+      await this.saveConfig()
+    }
+    return written
   }
 
   /**
@@ -497,19 +651,23 @@ export class WalletFile {
   ): Promise<void> {
     if (oldYearMonth === newYearMonth) {
       // Same month: replace in-place
-      const content = await this.readMonthFile(oldYearMonth)
-      const transactions = content ? parseMonthFile(content) : []
-      const idx = this.findTransactionIndex(transactions, oldTx)
-      if (idx !== -1) transactions[idx] = { ...newTx, createdAt: newTx.createdAt ?? oldTx.createdAt ?? new Date().toISOString() }
-      transactions.sort(txDateOrder)
+      const replacement = { ...newTx, createdAt: newTx.createdAt ?? oldTx.createdAt ?? new Date().toISOString() }
+      let found = false
+      await this.modifyMonth(oldYearMonth, transactions => {
+        const idx = this.findTransactionIndex(transactions, oldTx)
+        found = idx !== -1
+        if (!found) return null
+        const updated = [...transactions]
+        updated[idx] = replacement
+        return updated.sort(txDateOrder)
+      })
+      if (!found) throw new TransactionChangedError()
       if (newTx.tags?.length) {
         this.mergeTags(newTx.tags)
         await this.saveConfig()
       }
-      const summary = this.computeSummary(transactions)
-      await this.writeMonthFile(oldYearMonth, buildMonthContent(oldYearMonth, transactions, summary))
     } else {
-      // Cross-month: delete from old, insert into new
+      // Cross-month: delete from old (throws if it's gone), then insert into new
       await this.deleteTransactionFromMonth(oldTx, oldYearMonth)
       await this.writeTransaction(newTx, newYearMonth)
     }
@@ -521,23 +679,15 @@ export class WalletFile {
 
   async renameBudgetInTransactions(oldName: string, newName: string): Promise<void> {
     const months = this.getAllYearMonths()
-    await Promise.all(months.map(async (ym) => {
-      const content = await this.readMonthFile(ym)
-      if (!content) return
-      const transactions = parseMonthFile(content)
-      if (!transactions.some(tx => tx.budget === oldName)) return
-      const updated = transactions.map(tx => tx.budget === oldName ? { ...tx, budget: newName } : tx)
-      const summary = this.computeSummary(updated)
-      await this.writeMonthFile(ym, buildMonthContent(ym, updated, summary))
-    }))
+    await Promise.all(months.map(ym => this.modifyMonth(ym, transactions => {
+      if (!transactions.some(tx => tx.budget === oldName)) return null
+      return transactions.map(tx => tx.budget === oldName ? { ...tx, budget: newName } : tx)
+    })))
   }
 
   async renameWalletInTransactions(oldName: string, newName: string): Promise<void> {
     const months = this.getAllYearMonths()
-    await Promise.all(months.map(async (ym) => {
-      const content = await this.readMonthFile(ym)
-      if (!content) return
-      const transactions = parseMonthFile(content)
+    await Promise.all(months.map(ym => this.modifyMonth(ym, transactions => {
       const updated = transactions.map(tx => ({
         ...tx,
         wallet:     tx.wallet     === oldName ? newName : tx.wallet,
@@ -549,20 +699,18 @@ export class WalletFile {
         tx.fromWallet !== transactions[i].fromWallet ||
         tx.toWallet !== transactions[i].toWallet,
       )
-      if (!hasChange) return
-      const summary = this.computeSummary(updated)
-      await this.writeMonthFile(ym, buildMonthContent(ym, updated, summary))
-    }))
+      return hasChange ? updated : null
+    })))
   }
 
   private async deleteTransactionFromMonth(tx: Transaction, yearMonth: string): Promise<void> {
-    const content = await this.readMonthFile(yearMonth)
-    if (!content) return
-    const transactions = parseMonthFile(content)
-    const idx = this.findTransactionIndex(transactions, tx)
-    if (idx !== -1) transactions.splice(idx, 1)
-    const summary = this.computeSummary(transactions)
-    await this.writeMonthFile(yearMonth, buildMonthContent(yearMonth, transactions, summary))
+    let found = false
+    await this.modifyMonth(yearMonth, transactions => {
+      const idx = this.findTransactionIndex(transactions, tx)
+      found = idx !== -1
+      return found ? transactions.filter((_, i) => i !== idx) : null
+    })
+    if (!found) throw new TransactionChangedError()
   }
 
   private findTransactionIndex(transactions: Transaction[], target: Transaction): number {
@@ -604,11 +752,8 @@ export class WalletFile {
    * Recompute income/expense/netAsset for a given month and persist to frontmatter.
    */
   async recalculateFrontmatter(yearMonth: string): Promise<void> {
-    const content = await this.readMonthFile(yearMonth)
-    if (!content) return
-    const transactions = parseMonthFile(content)
-    const summary = this.computeSummary(transactions)
-    await this.writeMonthFile(yearMonth, buildMonthContent(yearMonth, transactions, summary))
+    if (!this.app.vault.getFileByPath(this.monthFilePath(yearMonth))) return
+    await this.modifyMonth(yearMonth, transactions => transactions)
   }
 
   // ── Data Validation ──────────────────────────────────────────────────────────
@@ -637,6 +782,7 @@ export class WalletFile {
 
     const orphanIssues = detectOrphanedWallets(monthData, this.config.wallets)
     issues.push(...orphanIssues)
+    issues.push(...detectDuplicateCharges(monthData, this.config.subscriptions ?? []))
 
     return issues
   }

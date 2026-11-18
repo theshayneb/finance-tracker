@@ -126,15 +126,21 @@ export function subscriptionTransaction(sub: Subscription, date: string): Transa
 }
 
 /**
- * Whether the month already holds this charge, e.g. recorded on another device
- * before this one synced. Matches the date, the note and the amount.
+ * Whether the month already holds this charge: an expense on the same date with
+ * the subscription's name as its note, whatever the amount (it may have been
+ * edited, or recorded on another device).
  */
 export function hasMatchingCharge(monthTransactions: readonly Transaction[], tx: Transaction): boolean {
   return monthTransactions.some(existing =>
     existing.type === 'expense' &&
     existing.date === tx.date &&
-    existing.note === tx.note &&
-    existing.amount === tx.amount)
+    existing.note === tx.note)
+}
+
+/** The day before `date` ("yyyy-mm-dd"). */
+export function dayBefore(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return toDateString(new Date(y, m - 1, d - 1))
 }
 
 export type SubscriptionNameError = 'err.subscriptionNameEmpty' | 'err.subscriptionNameInvalid'

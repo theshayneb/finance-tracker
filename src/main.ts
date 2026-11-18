@@ -14,9 +14,10 @@ import { formatAmount, parseTagList } from './utils'
 import { SubscriptionModal } from './modal/SubscriptionModal'
 import { recordDueSubscriptions, saveSubscription } from './subscriptionRecorder'
 import { toDateString } from './subscriptions'
-// Wait after startup so Obsidian Sync can bring in charges another device already recorded.
-const SUBSCRIPTION_STARTUP_DELAY_MS = 15_000
+import { CONFIG_BACKUP_KEY, backgroundTasksEnabled, syncSettled } from './device'
+
 const SUBSCRIPTION_CHECK_INTERVAL_MS = 60 * 60 * 1000
+const SETTLE_RETRY_MS = 60 * 1000
 
 /** A notice with a heading line and one line per item. */
 function noticeLines(heading: string, lines: string[]): DocumentFragment {
@@ -29,6 +30,9 @@ function noticeLines(heading: string, lines: string[]): DocumentFragment {
 export default class PennyWalletPlugin extends Plugin {
   walletFile!: WalletFile
   private lastSubscriptionCheckDay = ''
+  private readonly startedAt = Date.now()
+  private lastVaultChange = 0
+  private settleTimer = 0
 
   async onload() {
     initI18n()
@@ -38,6 +42,8 @@ export default class PennyWalletPlugin extends Plugin {
     this.walletFile = new WalletFile(this.app, {
       load: () => this.loadData(),
       save: (config) => this.saveData(config),
+      loadBackup: () => this.app.loadLocalStorage(CONFIG_BACKUP_KEY) as unknown,
+      saveBackup: (config) => this.app.saveLocalStorage(CONFIG_BACKUP_KEY, config),
     })
 
     // ── All synchronous registrations FIRST (so ribbon/commands survive restart) ──
@@ -81,7 +87,8 @@ export default class PennyWalletPlugin extends Plugin {
     // ── Async work AFTER all synchronous registrations ──
     try {
       await this.walletFile.loadConfig()
-      await this.walletFile.bootstrapFrontmatter()
+      // Rewrites month files, so only on the device that does automatic work.
+      if (backgroundTasksEnabled(this.app)) await this.walletFile.bootstrapFrontmatter()
 
       // First-launch onboarding: only when config is created in this load
       if (this.walletFile.didCreateDefaultConfigOnLastLoad()) {
@@ -92,10 +99,13 @@ export default class PennyWalletPlugin extends Plugin {
         void this.runValidation(false)
       }
 
-      this.app.workspace.onLayoutReady(() => {
-        const timer = window.setTimeout(() => { void this.checkSubscriptions() }, SUBSCRIPTION_STARTUP_DELAY_MS)
-        this.register(() => window.clearTimeout(timer))
-      })
+      // Sync writes other devices' changes as file changes: automatic work waits
+      // until the vault has been quiet for a while (see syncSettled).
+      for (const name of ['modify', 'create', 'delete', 'rename'] as const) {
+        this.registerEvent(this.app.vault.on(name as 'modify', () => { this.lastVaultChange = Date.now() }))
+      }
+      this.register(() => window.clearTimeout(this.settleTimer))
+      this.app.workspace.onLayoutReady(() => { void this.checkSubscriptions() })
       this.registerInterval(window.setInterval(() => { void this.checkSubscriptions() }, SUBSCRIPTION_CHECK_INTERVAL_MS))
       this.registerEvent((this.app.workspace as Events).on('penny-wallet-mod:subscriptions-changed', () => {
         void this.checkSubscriptions()
@@ -107,8 +117,9 @@ export default class PennyWalletPlugin extends Plugin {
   }
 
   // Called by Obsidian when data.json changes on disk, e.g. synced from another device.
+  // Merged with this device's settings, never simply loaded: the synced copy may be older.
   async onExternalSettingsChange() {
-    await this.walletFile.loadConfig()
+    await this.walletFile.reconcileConfig()
     this.refreshViews()
   }
 
@@ -126,9 +137,10 @@ export default class PennyWalletPlugin extends Plugin {
   // ── Subscriptions ─────────────────────────────────────────────────────────
 
   /**
-   * Records due subscription charges. Also refreshes the views when the day has
-   * changed, so the overview's Upcoming bills card stays current in an Obsidian
-   * that is never closed.
+   * Refreshes the views when the day has changed, so the overview's Upcoming
+   * bills card stays current in an Obsidian that is never closed. On the device
+   * that runs background tasks, also records due subscription charges, once
+   * Sync has settled (checked again every minute until it has).
    */
   async checkSubscriptions() {
     try {
@@ -136,12 +148,19 @@ export default class PennyWalletPlugin extends Plugin {
       const today = toDateString(new Date())
       const newDay = this.lastSubscriptionCheckDay !== '' && this.lastSubscriptionCheckDay !== today
       this.lastSubscriptionCheckDay = today
+      if (newDay) this.refreshViews()
+      if (!backgroundTasksEnabled(this.app)) return
+      if (!syncSettled(this.app, this.startedAt, this.lastVaultChange)) {
+        window.clearTimeout(this.settleTimer)
+        this.settleTimer = window.setTimeout(() => { void this.checkSubscriptions() }, SETTLE_RETRY_MS)
+        return
+      }
       const recorded = await recordDueSubscriptions(this.walletFile, today)
       if (recorded.length > 0) {
         const lines = recorded.map(({ sub, date }) => `${sub.name} · ${date} · ${formatAmount(sub.amount, dp)}`)
         new Notice(noticeLines(t('notice.subscriptionsRecorded'), lines), 10000)
       }
-      if (recorded.length > 0 || newDay) this.refreshViews()
+      if (recorded.length > 0) this.refreshViews()
     } catch (e) {
       console.error('Finance Tracker: subscription check failed', e)
     }

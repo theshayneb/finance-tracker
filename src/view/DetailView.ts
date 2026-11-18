@@ -56,6 +56,7 @@ export class DetailView extends ItemView {
       this.filterUntagged = false
     }
     if (state?.yearMonth) this.currentYearMonth = state.yearMonth as string
+    if (typeof state?.filterSearch === 'string') this.filterSearch = state.filterSearch
     if (state?.filterType) this.filterTypes = new Set([state.filterType as TransactionType])
     if (state?.filterCategory) this.filterCategories = new Set([state.filterCategory as string])
     if (state?.filterBudget) this.filterBudget = state.filterBudget as string

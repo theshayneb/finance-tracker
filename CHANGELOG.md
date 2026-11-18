@@ -2,6 +2,24 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.53] - 2026-11-18
+
+Safer with Obsidian Sync across devices that sync at different times. Update every device to this version.
+
+### Added
+- **Settings → This device → Run background tasks on this device.** Only a device with this on records subscriptions automatically. It is on by default on a computer and off on a phone or tablet, and isn't synced. Background work also waits until Sync has caught up (a few minutes after Obsidian starts, with no file changes for a minute).
+- **Validate data** now lists **possible duplicate charges**: expenses on the same date named after the same subscription. They are only flagged; nothing is deleted, and "Fix all" leaves them alone. **Show in transactions** opens that month filtered to the bill.
+
+### Fixed
+- Settings no longer overwrite each other between devices. Each subscription, budget, account, tag, category and setting keeps its newest edit, and deletions stick. A device's older copy arriving through Sync is merged instead of replacing newer changes, and a bill's "recorded up to" date can't go backwards.
+- Adding, editing or deleting a transaction no longer drops rows that Sync wrote into the month just before.
+- Editing or deleting a transaction that changed on another device now says so, instead of losing the edit or leaving a duplicate.
+- A new device no longer saves default settings before your real ones have synced in.
+- Auto-recording also skips a charge already in the month at a different amount.
+
+### Changed
+- Changing a bill's next charge date to before a charge already recorded no longer records that charge again.
+
 ## [0.0.52] - 2026-11-16
 
 ### Changed

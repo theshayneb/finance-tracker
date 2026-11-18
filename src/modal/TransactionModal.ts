@@ -393,7 +393,7 @@ export class TransactionModal extends Modal {
         this.onSuccess?.()
         new Notice(t('notice.transactionDeleted'))
       } catch (e) {
-        this.showError(String(e))
+        this.showError(e instanceof Error ? e.message : String(e))
       } finally {
         this.isDeleting = false
       }
@@ -423,7 +423,7 @@ export class TransactionModal extends Modal {
       this.onSuccess?.()
       new Notice(t(this.editingTx ? 'notice.transactionUpdated' : 'notice.transactionAdded'))
     } catch (e) {
-      this.showError(String(e))
+      this.showError(e instanceof Error ? e.message : String(e))
     } finally {
       this.isConfirming = false
     }

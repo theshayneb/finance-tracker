@@ -2458,6 +2458,22 @@ select.pw-add-wallet-input {
   line-height: 1.5;
 }
 
+.pw-validation-dup-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-validation-dup-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: 4px 0 0;
+}
+
 /* Footer row for frontmatter cards (fix button, right-aligned) */
 .pw-validation-card-footer {
   display: flex;

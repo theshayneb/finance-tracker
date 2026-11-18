@@ -107,10 +107,12 @@ describe('helpers', () => {
     expect(subscriptionTransaction(sub(), '2026-11-05')).not.toHaveProperty('tags')
   })
 
-  it('matches an existing charge by date, note and amount', () => {
+  it('matches an existing charge by date and note, whatever the amount', () => {
     const tx = subscriptionTransaction(sub(), '2026-11-05')
     expect(hasMatchingCharge([{ ...tx, createdAt: 'x', wallet: 'Bank' }], tx)).toBe(true)
-    expect(hasMatchingCharge([{ ...tx, amount: 16 }], tx)).toBe(false)
+    expect(hasMatchingCharge([{ ...tx, amount: 16 }], tx)).toBe(true)
+    expect(hasMatchingCharge([{ ...tx, date: '11/06' }], tx)).toBe(false)
+    expect(hasMatchingCharge([{ ...tx, type: 'income' }], tx)).toBe(false)
   })
 
   it('validates names', () => {

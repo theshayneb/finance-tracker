@@ -22,25 +22,25 @@ export function recordDueSubscriptions(walletFile: WalletFile, today: string): P
 }
 
 async function recordDue(walletFile: WalletFile, today: string): Promise<RecordedCharge[]> {
+  // Start from what is saved now, merged with this device's settings.
+  await walletFile.reconcileConfig()
   const recorded: RecordedCharge[] = []
   const lastById = new Map<string, string>()
   for (const sub of walletFile.getConfig().subscriptions ?? []) {
     if (!sub.autoRecord) continue
     for (const date of dueChargeDates(sub, today)) {
-      const yearMonth = date.substring(0, 7)
       const tx = subscriptionTransaction(sub, date)
-      const existing = await walletFile.readMonth(yearMonth)
-      if (!hasMatchingCharge(existing, tx)) {
-        await walletFile.writeTransaction(tx, yearMonth)
-        recorded.push({ sub, date })
-      }
+      const written = await walletFile.writeTransactionIfAbsent(tx, date.substring(0, 7), rows => hasMatchingCharge(rows, tx))
+      if (written) recorded.push({ sub, date })
       lastById.set(sub.id, date)
     }
   }
   if (lastById.size > 0) {
     // Re-read: writeTransaction may have saved new tags into the config.
-    const subscriptions = (walletFile.getConfig().subscriptions ?? []).map(s =>
-      lastById.has(s.id) ? { ...s, lastRecorded: lastById.get(s.id) } : s)
+    const subscriptions = (walletFile.getConfig().subscriptions ?? []).map(s => {
+      const last = lastById.get(s.id)
+      return last && (!s.lastRecorded || last > s.lastRecorded) ? { ...s, lastRecorded: last } : s
+    })
     walletFile.updateConfig({ subscriptions })
     await walletFile.saveConfig()
   }

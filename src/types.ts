@@ -175,4 +175,12 @@ export interface OrphanedWalletIssue {
   yearMonths: string[]
 }
 
-export type ValidationIssue = FrontmatterIssue | OrphanedWalletIssue
+export interface DuplicateChargeIssue {
+  type: 'duplicateCharge'
+  yearMonth: string
+  date: string          // "MM/DD"
+  name: string          // the subscription's name (the expenses' note)
+  transactions: Transaction[]
+}
+
+export type ValidationIssue = FrontmatterIssue | OrphanedWalletIssue | DuplicateChargeIssue

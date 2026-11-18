@@ -26,6 +26,8 @@ vi.mock('obsidian', () => ({
     close() {}
   },
   Notice: class Notice { constructor(_: string) {} },
+  // Mutable so tests can act as a phone (isMobile = true).
+  Platform: { isMobile: false },
   Plugin: class Plugin {},
   // Mirrors Obsidian's suggest base class closely enough to catch subclasses
   // that clash with its internal state (it assigns isOpen etc. in its constructor).

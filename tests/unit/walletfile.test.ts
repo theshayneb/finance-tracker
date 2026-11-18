@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { WalletFile, buildMonthContent } from '../../src/io/WalletFile'
+import { WalletFile, buildMonthContent, TransactionChangedError } from '../../src/io/WalletFile'
 import { createMockApp } from '../helpers/mockApp'
 import type { Transaction, Wallet } from '../../src/types'
 
@@ -25,11 +25,11 @@ describe('deleteTransaction', () => {
     expect(store.get(`${FOLDER}/2026-04.md`)).not.toContain('lunch')
   })
 
-  it('keeps existing transactions when target is not found', async () => {
+  it('keeps existing transactions and reports it when the target is not found', async () => {
     const { app, store } = createMockApp({ [`${FOLDER}/2026-04.md`]: monthFile('2026-04', [TX], 0, 100) })
     const wf = new WalletFile(app)
     wf.updateConfig({ wallets: [CASH] })
-    await wf.deleteTransaction({ ...TX, note: 'ghost' }, '2026-04')
+    await expect(wf.deleteTransaction({ ...TX, note: 'ghost' }, '2026-04')).rejects.toBeInstanceOf(TransactionChangedError)
     expect(store.get(`${FOLDER}/2026-04.md`)).toContain('lunch')
   })
 })

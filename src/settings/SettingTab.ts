@@ -8,6 +8,7 @@ import { Budget, Subscription, Wallet, WalletBalance, WalletType } from '../type
 import { validateBudgetName } from '../budget'
 import { monthlyCost, nextChargeDate } from '../subscriptions'
 import { saveSubscription } from '../subscriptionRecorder'
+import { backgroundTasksEnabled, setBackgroundTasksEnabled } from '../device'
 import { formatAmount } from '../utils'
 import { t, tn, translateCategory } from '../i18n'
 
@@ -32,6 +33,7 @@ export class PennyWalletSettingTab extends PluginSettingTab {
         walletsWithTransactions = data.walletsWithTransactions
       } catch { /* show initial balance only if calculation fails */ }
 
+      this.renderThisDevice()
       this.renderGeneral()
       this.renderActiveWallets(walletBalances, walletsWithTransactions)
       this.renderArchivedWallets()
@@ -50,6 +52,25 @@ export class PennyWalletSettingTab extends PluginSettingTab {
 
   private getSettingsScrollTop(): number {
     return this.containerEl.closest<HTMLElement>('.vertical-tab-content')?.scrollTop ?? 0
+  }
+
+  /** Settings kept in this device's local storage, not in the synced data.json. */
+  private renderThisDevice() {
+    const { containerEl } = this
+    new Setting(containerEl)
+      .setName(t('settings.thisDevice'))
+      .setDesc(t('settings.thisDeviceDesc'))
+      .setHeading()
+    const group = containerEl.createDiv('pw-settings-group')
+    new Setting(group)
+      .setName(t('settings.backgroundTasks'))
+      .setDesc(t('settings.backgroundTasksDesc'))
+      .addToggle(toggle => toggle
+        .setValue(backgroundTasksEnabled(this.app))
+        .onChange((value) => {
+          setBackgroundTasksEnabled(this.app, value)
+          if (value) this.app.workspace.trigger('penny-wallet-mod:subscriptions-changed')
+        }))
   }
 
   private renderGeneral() {

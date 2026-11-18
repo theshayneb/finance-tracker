@@ -30,3 +30,7 @@ npm run build
 - UI strings go in `src/i18n.ts` in both `zh-TW` and `en`; the Obsidian lint rules require sentence case.
 - Don't give subclasses of Obsidian classes members that may clash with undocumented internals (e.g. `isOpen` on `AbstractInputSuggest`); use a `pw` prefix.
 - On the owner's Android phone, settings synced from another device may only appear after fully closing and reopening Obsidian.
+- Sync safety (the owner's desktop is always on; phone and tablet sync rarely and work offline):
+  - Settings are merged per entry, never replaced: `src/configMerge.ts` stamps edits at save time, keeps tombstones, and `WalletFile.saveConfig`/`reconcileConfig` read, merge, then write. Edit the config and call `saveConfig()`; don't write data.json any other way.
+  - Month files are only changed through `WalletFile.modifyMonth` (inside `vault.process`), never by writing a copy read earlier.
+  - Automatic work (recording subscriptions, startup file repairs) runs only where "Run background tasks on this device" is on (`src/device.ts`, local storage) and after `syncSettled()`.

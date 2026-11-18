@@ -4,7 +4,7 @@ import type { Subscription, SubscriptionFrequency } from '../types'
 import { t } from '../i18n'
 import { parseTagList } from '../utils'
 import { getBudgetOptions, getCategoryOptions, resolveDefaultWallet } from './transactionState'
-import { isValidDateString, newSubscriptionId, nextChargeDate, toDateString, validateSubscriptionName } from '../subscriptions'
+import { dayBefore, isValidDateString, newSubscriptionId, nextChargeDate, toDateString, validateSubscriptionName } from '../subscriptions'
 
 const FREQUENCIES: SubscriptionFrequency[] = ['monthly', 'quarterly', 'yearly']
 
@@ -166,7 +166,12 @@ export class SubscriptionModal extends Modal {
       ...(tags.length ? { tags } : {}),
       ...(this.budget ? { budget: this.budget } : {}),
       autoRecord: this.autoRecord,
-      ...(!restart && base.lastRecorded ? { lastRecorded: base.lastRecorded } : {}),
+      // Charges before the next one count as handled. On a synced device the later
+      // of this and the old date is kept, so moving the date earlier than a charge
+      // already recorded doesn't record that charge again.
+      ...(restart
+        ? (base ? { lastRecorded: dayBefore(this.nextDate) } : {})
+        : (base.lastRecorded ? { lastRecorded: base.lastRecorded } : {})),
     }
   }
 

@@ -183,12 +183,16 @@ describe('loadConfig with a config store', () => {
     expect(store.has('.penny-wallet.json')).toBe(true)
   })
 
-  it('first launch writes defaults to plugin data, not the vault root', async () => {
+  it('first launch keeps defaults in memory until something is edited, then saves to plugin data', async () => {
+    // A new device whose data.json hasn't synced in yet must not save a default copy.
     const s = makeStore(null)
     const { app, store } = createMockApp()
     const wf = new WalletFile(app, s.store)
     await wf.loadConfig()
     expect(wf.didCreateDefaultConfigOnLastLoad()).toBe(true)
+    expect(s.saves).toHaveLength(0)
+    wf.updateConfig({ decimalPlaces: 2 })
+    await wf.saveConfig()
     expect(s.saves).toHaveLength(1)
     expect(store.has('.penny-wallet.json')).toBe(false)
   })
