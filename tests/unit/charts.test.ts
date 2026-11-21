@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { filterPieData, formatK, getThemeColors } from '../../src/view/charts'
+import { filterPieData, formatK, getThemeColors, tooltipTitle } from '../../src/view/charts'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -159,5 +159,15 @@ describe('assignCategoryColors', () => {
   it('gives each ranked category a color, cycling through the palette', () => {
     const map = assignCategoryColors(['x', 'y', 'z'], ['red', 'blue'])
     expect([...map]).toEqual([['x', 'red'], ['y', 'blue'], ['z', 'red']])
+  })
+})
+
+describe('tooltipTitle', () => {
+  it('gives nothing, instead of throwing, when the filter left no items (an empty month)', () => {
+    expect(tooltipTitle([], i => `month ${i}`)).toEqual([])
+  })
+
+  it('uses the first item', () => {
+    expect(tooltipTitle([{ dataIndex: 2 }, { dataIndex: 3 }], i => `month ${i}`)).toBe('month 2')
   })
 })

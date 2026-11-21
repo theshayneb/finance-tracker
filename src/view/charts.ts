@@ -47,6 +47,15 @@ export function getThemeColors() {
   }
 }
 
+/**
+ * A tooltip title or footer from its first item; nothing when there are no items
+ * (the bar chart's filter leaves none over an empty month). Must never throw:
+ * an error here stops Chart.js's shared animation loop and blanks every chart.
+ */
+export function tooltipTitle(items: readonly { dataIndex: number }[], text: (dataIndex: number) => string): string | string[] {
+  return items.length ? text(items[0].dataIndex) : []
+}
+
 /** Neutral color for the pie's grouped "Other" slice; last in the pie palette. */
 export const OTHER_COLOR = '#888780'
 
@@ -137,10 +146,13 @@ export function drawExpenseChart(
         tooltip: {
           filter: (item) => (item.raw as number) > 0,
           itemSort: (a, b) => b.datasetIndex - a.datasetIndex,  // top segment first, like the bar
+          // Over a month with no expenses the filter leaves no items. Return nothing
+          // then: reading items[0] there threw, and the error stopped Chart.js's
+          // shared animation loop, leaving every chart drawn afterwards blank.
           callbacks: {
-            title: (items) => data[items[0].dataIndex].tooltipLabel,
+            title: (items) => tooltipTitle(items, i => data[i].tooltipLabel),
             label: (ctx) => `${ctx.dataset.label ?? ''}: ${formatK(ctx.raw as number, dp)}`,
-            footer: (items) => items.length ? `${t('dash.expense')}: ${formatK(totals[items[0].dataIndex], dp)}` : '',
+            footer: (items) => tooltipTitle(items, i => `${t('dash.expense')}: ${formatK(totals[i], dp)}`),
           },
         },
         datalabels: {
@@ -260,7 +272,7 @@ export function drawPie(
         datalabels: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) => segments[items[0].dataIndex].label,
+            title: (items) => tooltipTitle(items, i => segments[i].label),
             label: (ctx) => {
               const seg = segments[ctx.dataIndex]
               const pct = Math.round((seg.value / total) * 100)

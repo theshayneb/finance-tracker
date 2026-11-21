@@ -2,6 +2,11 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.54] - 2026-11-21
+
+### Fixed
+- Overview charts going blank. Hovering the expenses chart over a month with no expenses caused an error that stopped all chart drawing, so the bar chart and both pie charts came up empty until Obsidian was restarted.
+
 ## [0.0.53] - 2026-11-18
 
 Safer with Obsidian Sync across devices that sync at different times. Update every device to this version.
