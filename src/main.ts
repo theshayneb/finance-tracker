@@ -6,6 +6,7 @@ import { DashboardView, DASHBOARD_VIEW_TYPE } from './view/DashboardView'
 import { DetailView, DETAIL_VIEW_TYPE } from './view/DetailView'
 import { BudgetView, BUDGET_VIEW_TYPE } from './view/BudgetView'
 import { BUDGET_EMBED_LANG, BUDGET_EMBED_REFRESH, processBudgetEmbed } from './view/BudgetEmbed'
+import { FOLLOW_UPS_EMBED_LANG, processFollowUpsEmbed } from './view/FollowUpsEmbed'
 import { PennyWalletSettingTab } from './settings/SettingTab'
 import { ValidationModal } from './modal/ValidationModal'
 import { TransactionModalParams, TransactionType } from './types'
@@ -54,6 +55,9 @@ export default class PennyWalletPlugin extends Plugin {
     // ```finance-budget``` blocks in notes: one budget's progress bar
     this.registerMarkdownCodeBlockProcessor(BUDGET_EMBED_LANG, processBudgetEmbed(this.app, this.walletFile,
       (budget, yearMonth) => { void this.openOrRevealView(DETAIL_VIEW_TYPE, { yearMonth, filterBudget: budget, resetFilters: true }) }))
+
+    // ```finance-followups``` blocks in notes: the Overview's Follow-ups card
+    this.registerMarkdownCodeBlockProcessor(FOLLOW_UPS_EMBED_LANG, processFollowUpsEmbed(this.app, this.walletFile))
 
     this.addRibbonIcon('wallet', 'Finance tracker', () => { void this.openDashboard() })
 

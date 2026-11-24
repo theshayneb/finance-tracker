@@ -1,15 +1,15 @@
 import { Events, ItemView, ViewStateResult, WorkspaceLeaf } from 'obsidian'
 import { WalletFile } from '../io/WalletFile'
-import { t, tn, formatMonthLabel, formatYearMonth, translateCategory } from '../i18n'
-import { currentYearMonth, tagKey } from '../utils'
+import { t, formatMonthLabel, formatYearMonth, translateCategory } from '../i18n'
+import { currentYearMonth } from '../utils'
 import { computeBudgetUsage, getMonthProgress } from '../budget'
 import { renderBudgetProgress } from './budgetComponents'
 import { renderCard } from './components'
 import { Transaction, TransactionType } from '../types'
 import { DETAIL_VIEW_TYPE } from './DetailView'
 import { renderSharedHeader, switchView } from './SharedHeader'
-import { openTransactionEditor, renderNoteWithLinks, renderTransactionRow } from './txShared'
 import { renderUpcomingBills } from './UpcomingBills'
+import { renderFollowUpsCard } from './followUps'
 import { Chart } from 'chart.js'
 import { MonthData, OTHER_COLOR, assignCategoryColors, drawExpenseChart, drawPie, getMonthRangeEndingAt, getThemeColors, rankCategories } from './charts'
 
@@ -107,7 +107,12 @@ export class DashboardView extends ItemView {
     if (hasBudgets || followUps) {
       const topRow = gridLeft.createDiv('pw-left-top')
       if (hasBudgets) this.renderBudgets(topRow, transactions, dp)
-      if (followUps) this.renderFollowUps(topRow, followUpTag, followUps, dp)
+      if (followUps) {
+        renderFollowUpsCard(topRow, {
+          app: this.app, walletFile: this.walletFile, tag: followUpTag, items: followUps, dp,
+          hoverParent: this, hoverSource: DASHBOARD_VIEW_TYPE,
+        })
+      }
     }
 
     // Bar chart with upcoming bills beside it (they wrap below when the column is narrow).
@@ -165,51 +170,6 @@ export class DashboardView extends ItemView {
         if (e.key !== 'Enter' && e.key !== ' ') return
         e.preventDefault()
         open()
-      })
-    }
-  }
-
-  /** All transactions with the follow-up tag (any month); click a row to edit it. */
-  private renderFollowUps(
-    parent: HTMLElement,
-    tag: string,
-    items: { tx: Transaction; yearMonth: string }[],
-    dp: 0 | 2,
-  ) {
-    const card = renderCard(parent, { className: 'pw-follow-up-card' })
-    card.dataset['testid'] = 'follow-up-card'
-    const head = card.createDiv('pw-card-title pw-follow-up-title')
-    head.createSpan({ text: t('dash.followUps') })
-    head.createSpan({ text: `#${tag} · ${items.length}`, cls: 'pw-follow-up-count' })
-
-    if (items.length === 0) {
-      card.createEl('p', { text: tn('dash.noFollowUps', { tag }), cls: 'pw-no-data' })
-      return
-    }
-
-    const list = card.createDiv('pw-follow-up-list')
-    const thisYear = currentYearMonth().slice(0, 4)
-    for (const { tx, yearMonth } of items) {
-      const year = yearMonth.slice(0, 4)
-      const row = renderTransactionRow(list, tx, {
-        dp,
-        // Follow-ups span months; show the year only when it isn't this year
-        dateText: year === thisYear ? tx.date : `${year}/${tx.date}`,
-        renderNote: (el, note) => renderNoteWithLinks(el, note, {
-          app: this.app,
-          sourcePath: this.walletFile.monthFilePath(yearMonth),
-          hoverParent: this,
-          source: DASHBOARD_VIEW_TYPE,
-        }),
-        onClick: () => openTransactionEditor(this.app, this.walletFile, tx, yearMonth),
-      })
-      row.dataset['testid'] = 'follow-up-row'
-      // Every row has the follow-up tag; only show the others
-      row.querySelectorAll<HTMLElement>('.pw-tx-tag-chip').forEach(chip => {
-        if (tagKey(chip.dataset['tag'] ?? '') === tagKey(tag)) chip.remove()
-      })
-      row.querySelectorAll('.pw-tx-row-line4').forEach(line => {
-        if (!line.querySelector('.pw-tx-tag-chip')) line.remove()
       })
     }
   }

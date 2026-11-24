@@ -2,6 +2,11 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.55] - 2026-11-24
+
+### Added
+- Follow-ups embed: put the Overview's **Follow-ups** card in any note with an empty `finance-followups` code block. It lists every transaction with your follow-up tag, from any month, and updates as you add, edit or untag them. Click a row to edit it. Write a tag inside the block (for example `reimburse`) to list that tag instead.
+
 ## [0.0.54] - 2026-11-21
 
 ### Fixed
