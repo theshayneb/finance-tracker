@@ -1045,8 +1045,11 @@ button.pw-mobile-calculator-done {
 }
 
 /* ── Dashboard ── */
+/* A size container: the narrow-layout rules at the end of this file measure the Overview, not the screen. */
 .pw-dashboard {
   padding-bottom: 40px;
+  container-type: inline-size;
+  container-name: pw-dashboard;
 }
 
 /* Chart legend (rect + label, horizontal) */
@@ -3094,4 +3097,41 @@ select.pw-validation-remap-select option {
 
 .pw-subscription-total {
   padding: 8px 0;
+}
+
+/* ── Overview on a narrow screen or pane ───────────────────────────────────
+   Two columns need about 720px (the pie column is 380px and the left cards
+   don't shrink below ~260px); narrower than that, the left column ran under
+   the pies. Measured on the Overview itself, so a narrow pane on a computer
+   gets the one-column layout too. Kept last so it wins over the grid rules. */
+@container pw-dashboard (max-width: 720px) {
+  .pw-dashboard > .pw-grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 12px 20px;
+  }
+
+  /* One column: budgets, follow-ups, the chart and bills, then the two pies */
+  .pw-grid-left,
+  .pw-grid-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    grid-row: auto;
+  }
+
+  .pw-grid-left > :only-child {
+    grid-row: auto;
+  }
+
+  .pw-dashboard .pw-card {
+    padding: 12px 14px;
+  }
+
+  .pw-grid-left .pw-inc-exp-card .pw-chart-wrap {
+    min-height: 220px;
+  }
+
+  .pw-dashboard .pw-pie-legend {
+    max-width: 420px;
+  }
 }

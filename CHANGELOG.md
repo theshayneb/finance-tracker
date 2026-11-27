@@ -2,6 +2,11 @@
 
 All notable changes to PennyWallet will be documented in this file.
 
+## [0.0.56] - 2026-11-27
+
+### Fixed
+- Overview on phones and narrow panes: the pie charts no longer cover the budgets, follow-ups and expenses chart. When the Overview is narrower than about 720px it switches to one column (budgets, follow-ups, the expenses chart and upcoming bills, then the two pie charts), with slightly tighter card padding. This is based on the Overview's own width, so a narrow pane on a computer gets it too.
+
 ## [0.0.55] - 2026-11-24
 
 ### Added
